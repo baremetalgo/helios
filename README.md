@@ -1,5 +1,9 @@
 # HELIOS Backend — Live Data Service
 
+<p align="center">
+  <img src="helios_test.png" width="75%">
+</p>
+
 A small Flask + SQLite service that solves the one thing the static
 `helios.html` frontend genuinely cannot do on its own: fetch live commodity
 prices, weather, and the dollar index **without hitting CORS walls**.
