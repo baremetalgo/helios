@@ -1,7 +1,7 @@
 # HELIOS Backend — Live Data Service
 
 <p align="center">
-  <img src="helios_test.png" width="75%">
+  <img src="helios_test.png" width="100%">
 </p>
 
 A small Flask + SQLite service that solves the one thing the static
