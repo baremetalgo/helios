@@ -121,9 +121,41 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
 }
 .right-rail{border-right:none;border-left:1px solid var(--line);}
 .rail-head{
-  padding:12px 14px 8px;border-bottom:1px solid var(--line);
+  padding:0;border-bottom:1px solid var(--line);
 }
 .rail-body{flex:1;overflow-y:auto;padding:8px;}
+
+.rail-tabs{display:flex;}
+.rail-tab{
+  flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-faint);
+  font-family:var(--mono);font-size:11px;letter-spacing:.1em;padding:11px 6px;cursor:pointer;
+}
+.rail-tab.active{color:var(--cyan);border-bottom-color:var(--cyan);background:rgba(53,214,240,.05);}
+.rail-tab:hover:not(.active){color:var(--text-dim);}
+
+/* options chain */
+.opt-disclaimer{
+  font-size:10.5px;line-height:1.5;color:var(--text-dim);padding:8px 10px;
+  background:rgba(255,167,51,.06);border:1px solid rgba(255,167,51,.25);margin-bottom:10px;
+}
+.opt-disclaimer b{color:var(--amber);}
+.opt-meta{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;font-size:11.5px;color:var(--text-dim);}
+.opt-meta b{font-size:16px;color:var(--text);}
+.opt-expiry-row{display:flex;gap:5px;margin-bottom:12px;}
+.opt-exp-btn{
+  flex:1;background:none;border:1px solid var(--line-bright);color:var(--text-dim);
+  font-family:var(--mono);font-size:11px;padding:6px 4px;cursor:pointer;
+}
+.opt-exp-btn.active{color:var(--cyan);border-color:var(--cyan-dim);background:rgba(53,214,240,.06);}
+.opt-row{border:1px solid var(--line);padding:7px 9px;margin-bottom:7px;}
+.opt-row.atm{border-color:var(--cyan-dim);background:rgba(53,214,240,.05);}
+.opt-strike{font-size:13.5px;font-weight:700;color:var(--text);margin-bottom:5px;display:flex;align-items:center;gap:7px;}
+.opt-strike .atm-tag{font-size:9px;font-weight:700;background:var(--cyan);color:#04222a;padding:1px 5px;letter-spacing:.05em;}
+.opt-side{display:grid;grid-template-columns:36px 1fr 1fr 1fr 1fr;gap:5px;font-size:11px;padding:3px 0;align-items:center;}
+.opt-side .opt-label{font-weight:700;font-size:10px;letter-spacing:.04em;}
+.opt-side.call{color:var(--green);}
+.opt-side.put{color:var(--red);}
+.opt-side .opt-val{color:var(--text);font-weight:500;}
 
 .section-label{
   font-size:12px;letter-spacing:.16em;color:var(--text-dim);text-transform:uppercase;
@@ -491,7 +523,10 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
 
     <aside class="rail right-rail" id="rightRail">
       <div class="rail-head">
-        <div class="eyebrow">Predictive Summary</div>
+        <div class="rail-tabs">
+          <button class="rail-tab active" data-tab="prediction">PREDICTIVE SUMMARY</button>
+          <button class="rail-tab" data-tab="options">OPTIONS CHAIN</button>
+        </div>
       </div>
       <div class="rail-body scroll" id="rightRailBody"></div>
     </aside>
@@ -903,11 +938,42 @@ function facilityDailyOutput(facility, events, idxHour){
 
 /* =========================================================================
    LIVE DATA (best-effort, free/keyless sources, always falls back gracefully)
+   Tries our own backend FIRST — that's the one path with no CORS restriction.
+   Falls back to a direct best-effort browser call, then to pure simulation.
+   Override via ?apiBase=http://your-host:port in the URL if not running locally.
 ========================================================================= */
+const API_BASE = (new URLSearchParams(location.search).get('apiBase') || 'http://localhost:5000').replace(/\/+$/, '');
+let backendOnline = false;
+
+async function checkBackend(){
+  try{
+    const res = await fetch(`${API_BASE}/api/health`);
+    backendOnline = res.ok;
+  } catch(e){ backendOnline = false; }
+  const el = document.getElementById('sysBackend');
+  if(el) el.innerHTML = backendOnline
+    ? `<span style="color:var(--green)">ONLINE</span> (${API_BASE.replace(/^https?:\/\//,'')})`
+    : `<span style="color:var(--text-faint)">OFFLINE</span> — using browser/sim fallback`;
+  return backendOnline;
+}
+
 const weatherCache = {};
 async function fetchLiveWeather(facility){
   const key = facility.name;
   if(weatherCache[key]) return weatherCache[key];
+
+  if(backendOnline){
+    try{
+      const res = await fetch(`${API_BASE}/api/weather/${encodeURIComponent(facility.name)}/latest`);
+      if(res.ok){
+        const d = await res.json();
+        const w = { temp:d.temp_c, cloud:d.cloud_pct, precip:d.precip_mm, wind:d.wind_kmh, live:true, source:'backend' };
+        weatherCache[key] = w;
+        return w;
+      }
+    } catch(e){ /* fall through to direct attempt */ }
+  }
+
   try{
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${facility.lat}&longitude=${facility.lon}&current=temperature_2m,cloud_cover,precipitation,wind_speed_10m`;
     const res = await fetch(url);
@@ -918,7 +984,7 @@ async function fetchLiveWeather(facility){
       cloud: data.current.cloud_cover,
       precip: data.current.precipitation,
       wind: data.current.wind_speed_10m,
-      live: true
+      live: true, source:'open-meteo-direct'
     };
     weatherCache[key] = w;
     return w;
@@ -933,32 +999,62 @@ async function refreshFacilityWeather(commodity){
   if(state.selected===commodity.id) renderRightRail();
 }
 
-const livePriceState = {}; // commodityId -> {live:bool, ts:Date}
+const livePriceState = {}; // commodityId -> {live:bool, source:string}
 async function fetchLivePrice(commodity){
-  if(!commodity.stooq) return null;
-  try{
-    const res = await fetch(`https://stooq.com/q/l/?s=${commodity.stooq}&f=sd2t2ohlcv&h&e=csv`);
-    if(!res.ok) throw new Error('bad response');
-    const text = await res.text();
-    const lines = text.trim().split('\n');
-    if(lines.length<2) throw new Error('no data row');
-    const cols = lines[1].split(',');
-    const close = parseFloat(cols[6]);
-    if(!isFinite(close) || close<=0) throw new Error('bad price');
-    return close;
-  } catch(e){ return null; }
+  if(backendOnline){
+    try{
+      const res = await fetch(`${API_BASE}/api/prices/${commodity.id}/latest`);
+      if(res.ok){
+        const d = await res.json();
+        if(typeof d.price === 'number' && d.price>0) return { price:d.price, source:'backend:'+(d.source||'?') };
+      }
+    } catch(e){ /* fall through */ }
+  }
+
+  if(commodity.stooq){
+    try{
+      const res = await fetch(`https://stooq.com/q/l/?s=${commodity.stooq}&f=sd2t2ohlcv&h&e=csv`);
+      if(res.ok){
+        const text = await res.text();
+        const lines = text.trim().split('\n');
+        if(lines.length>=2){
+          const cols = lines[1].split(',');
+          const close = parseFloat(cols[6]);
+          if(isFinite(close) && close>0) return { price:close, source:'stooq-direct' };
+        }
+      }
+    } catch(e){ /* expected to be CORS-blocked from a browser; harmless */ }
+  }
+  return null;
 }
 async function refreshLivePrices(){
+  await checkBackend();
   await Promise.all(COMMODITIES.map(async c=>{
     const live = await fetchLivePrice(c);
     if(live!=null){
-      WORLD[c.id].series[TOTAL_HOURS] = live;
-      livePriceState[c.id] = {live:true};
+      WORLD[c.id].series[TOTAL_HOURS] = live.price;
+      livePriceState[c.id] = {live:true, source:live.source};
     } else {
       livePriceState[c.id] = {live:false};
     }
   }));
+  await refreshLiveDXY();
   renderAll();
+}
+
+let dxyLiveState = {live:false};
+async function refreshLiveDXY(){
+  if(!backendOnline) return;
+  try{
+    const res = await fetch(`${API_BASE}/api/macro/dxy/latest`);
+    if(res.ok){
+      const d = await res.json();
+      if(typeof d.dxy === 'number' && d.dxy>0){
+        DXY_SERIES[TOTAL_HOURS] = d.dxy;
+        dxyLiveState = {live:true};
+      }
+    }
+  } catch(e){ /* fall through, keep simulated DXY */ }
 }
 
 /* =========================================================================
@@ -971,6 +1067,8 @@ const state = {
   speed: 4,
   layers: { facilities:true, news:true, weather:true, macro:true, clouds:true, routes:true, labels:true, rotate:true, heatmap:false, tankers:false },
   hoverPlace: null,
+  rightTab: 'prediction',
+  optionExpiryDays: 30,
 };
 
 /* =========================================================================
@@ -987,7 +1085,7 @@ const sysrow = $('sysrow');
 sysrow.innerHTML = `
   <span><i class="dot"></i>FEED: 14 SOURCES</span>
   <span><i class="dot"></i>DXY <b id="sysDXY" style="color:var(--text)">--</b></span>
-  <span><i class="dot"></i>LATENCY 41ms</span>
+  <span><i class="dot"></i>BACKEND: <b id="sysBackend">checking…</b></span>
 `;
 function renderSysRow(){
   const dxyChg = (DXY_SERIES[state.hourIdx]-DXY_SERIES[Math.max(0,state.hourIdx-24)])/DXY_SERIES[Math.max(0,state.hourIdx-24)]*100;
@@ -1024,10 +1122,10 @@ function renderAssetPanel(){
   $('aspSwatch').style.color = c.color;
   $('aspCat').textContent = c.category.toUpperCase();
   $('aspPrice').textContent = fmt(price, price<10?3:2) + ' ' + c.unit;
-  const isLive = livePriceState[c.id] && livePriceState[c.id].live;
+  const lp = livePriceState[c.id];
   const badge = $('aspSrcBadge');
-  badge.textContent = isLive ? 'LIVE (STOOQ)' : 'SIMULATED';
-  badge.className = 'src-badge' + (isLive?' live':'');
+  badge.textContent = lp && lp.live ? `LIVE (${lp.source.toUpperCase()})` : 'SIMULATED';
+  badge.className = 'src-badge' + (lp && lp.live ? ' live' : '');
 }
 
 function selectCommodity(id){
@@ -1093,6 +1191,90 @@ function tickClock(){
   $('clockD').textContent = now.toLocaleDateString(undefined,{month:'short',day:'2-digit',year:'numeric'}).toUpperCase() + ' · ' + TZ_LABEL;
 }
 setInterval(tickClock, 1000); tickClock();
+
+/* =========================================================================
+   OPTIONS CHAIN (fully simulated — see disclaimer in the UI)
+   There is no free, keyless real options-data source anywhere (real chains
+   need a paid feed like OPRA/CBOE DataShop or a paid aggregator). This is a
+   standard Black-Scholes pricer over a synthetic implied-vol surface that
+   reacts to the same simulated news/weather/macro signals driving the rest
+   of the app, so it's at least *internally* consistent — not real, but not
+   arbitrary either.
+========================================================================= */
+function erf(x){
+  const sign = x<0 ? -1 : 1; x = Math.abs(x);
+  const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
+  const t = 1/(1+p*x);
+  const y = 1 - (((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-x*x);
+  return sign*y;
+}
+function normCDF(x){ return 0.5*(1+erf(x/Math.SQRT2)); }
+
+function bsPrice(S,K,T,sigma,r,isCall){
+  if(T<=0 || sigma<=0) return Math.max(isCall ? S-K : K-S, 0);
+  const d1 = (Math.log(S/K) + (r+0.5*sigma*sigma)*T) / (sigma*Math.sqrt(T));
+  const d2 = d1 - sigma*Math.sqrt(T);
+  return isCall
+    ? S*normCDF(d1) - K*Math.exp(-r*T)*normCDF(d2)
+    : K*Math.exp(-r*T)*normCDF(-d2) - S*normCDF(-d1);
+}
+function bsDelta(S,K,T,sigma,r,isCall){
+  if(T<=0 || sigma<=0) return isCall ? (S>K?1:0) : (S<K?-1:0);
+  const d1 = (Math.log(S/K) + (r+0.5*sigma*sigma)*T) / (sigma*Math.sqrt(T));
+  return isCall ? normCDF(d1) : normCDF(d1)-1;
+}
+
+const IV_BASE = { wti:0.34, brent:0.32, ng:0.55, cu:0.24, au:0.16, ag:0.26, wheat:0.28, coffee:0.32 };
+const STRIKE_STEP = { wti:1, brent:1, ng:0.1, cu:0.1, au:25, ag:1, wheat:10, coffee:5 };
+
+function syntheticIV(commodity, S, K, T, idx){
+  const base = IV_BASE[commodity.id] || 0.3;
+  const window = 72;
+  const recentEvents = WORLD[commodity.id].events.filter(e=>e.hour<=idx && e.hour>=idx-window);
+  const intensity = recentEvents.reduce((a,e)=>a+Math.abs(e.sentiment*e.magnitude),0);
+  const warBoost = Math.abs(WAR_SIGNAL[idx]||0) * Math.abs(WAR_BETA[commodity.category]||0.3);
+  const ivLevel = base * (1 + Math.min(0.6, intensity*0.06) + Math.min(0.3, warBoost*0.1));
+  const moneyness = Math.log(K/S);
+  const smile = 0.55*moneyness*moneyness;
+  const skew = -0.12*moneyness;
+  const term = 1 + 0.08*Math.sqrt(T);
+  return Math.max(0.04, ivLevel*term + smile + skew);
+}
+
+function buildStrikeLadder(commodity, S){
+  const step = STRIKE_STEP[commodity.id] || Math.max(0.5, Math.round(S*0.02));
+  const atm = Math.round(S/step)*step;
+  const strikes = [];
+  for(let i=-5;i<=5;i++){ const k = +(atm + i*step).toFixed(4); if(k>0) strikes.push(k); }
+  return strikes;
+}
+
+const OPTION_EXPIRIES = [ {label:'7D', days:7}, {label:'30D', days:30}, {label:'60D', days:60}, {label:'90D', days:90} ];
+const RISK_FREE_RATE = 0.045;
+
+function buildOptionChain(commodityId, idx, expiryDays){
+  const c = COMMODITIES.find(c=>c.id===commodityId);
+  const S = priceAt(commodityId, idx);
+  const T = expiryDays/365;
+  const strikes = buildStrikeLadder(c, S);
+  const stepHalf = strikes.length>1 ? Math.abs(strikes[1]-strikes[0])/2 : S*0.01;
+  const rng = mulberry32(hashStr(commodityId+'-opt-'+expiryDays+'-'+Math.floor(idx/24)));
+  return strikes.map(K=>{
+    const iv = syntheticIV(c, S, K, T, idx);
+    const callPrice = bsPrice(S,K,T,iv,RISK_FREE_RATE,true);
+    const putPrice = bsPrice(S,K,T,iv,RISK_FREE_RATE,false);
+    const callDelta = bsDelta(S,K,T,iv,RISK_FREE_RATE,true);
+    const putDelta = bsDelta(S,K,T,iv,RISK_FREE_RATE,false);
+    const distAtm = Math.abs(K-S)/S;
+    const oiBase = Math.round(3000*Math.exp(-distAtm*18));
+    const callOI = Math.max(8, Math.round(oiBase*(0.7+rng()*0.6)));
+    const putOI = Math.max(8, Math.round(oiBase*(0.7+rng()*0.6)));
+    return {
+      strike:K, iv, callPrice, putPrice, callDelta, putDelta, callOI, putOI,
+      isATM: Math.abs(K-S) <= stepHalf
+    };
+  });
+}
 
 /* =========================================================================
    RIGHT RAIL — PREDICTION + PRODUCTION
@@ -1308,9 +1490,63 @@ function renderTimelineEvents(){
 /* =========================================================================
    MASTER RENDER
 ========================================================================= */
+function renderRightPane(){
+  if(state.rightTab==='options') renderOptionsChain();
+  else renderRightRail();
+}
+
+function renderOptionsChain(){
+  const c = COMMODITIES.find(c=>c.id===state.selected);
+  const S = priceAt(c.id, state.hourIdx);
+  const chain = buildOptionChain(c.id, state.hourIdx, state.optionExpiryDays);
+
+  let html = `
+    <div class="opt-disclaimer"><b>SIMULATED.</b> Black-Scholes pricing on a synthetic volatility surface — there is no free options-data source (real chains need a paid OPRA/CBOE-derived feed). Treat strikes, IV, and OI here as illustrative only.</div>
+    <div class="opt-meta"><span>UNDERLYING — ${c.name}</span><b>${fmt(S, S<10?3:2)} ${c.unit}</b></div>
+    <div class="opt-expiry-row">
+      ${OPTION_EXPIRIES.map(e=>`<button class="opt-exp-btn${e.days===state.optionExpiryDays?' active':''}" data-days="${e.days}">${e.label}</button>`).join('')}
+    </div>
+  `;
+  chain.forEach(row=>{
+    html += `
+      <div class="opt-row${row.isATM?' atm':''}">
+        <div class="opt-strike">${fmt(row.strike, row.strike<10?2:0)}${row.isATM?'<span class="atm-tag">ATM</span>':''}</div>
+        <div class="opt-side call">
+          <span class="opt-label">CALL</span>
+          <span class="opt-val">${fmt(row.callPrice,2)}</span>
+          <span>Δ${row.callDelta.toFixed(2)}</span>
+          <span>${(row.iv*100).toFixed(0)}% IV</span>
+          <span>${row.callOI.toLocaleString()} OI</span>
+        </div>
+        <div class="opt-side put">
+          <span class="opt-label">PUT</span>
+          <span class="opt-val">${fmt(row.putPrice,2)}</span>
+          <span>Δ${row.putDelta.toFixed(2)}</span>
+          <span>${(row.iv*100).toFixed(0)}% IV</span>
+          <span>${row.putOI.toLocaleString()} OI</span>
+        </div>
+      </div>`;
+  });
+  rightRailBody.innerHTML = html;
+  document.querySelectorAll('.opt-exp-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      state.optionExpiryDays = parseInt(btn.dataset.days,10);
+      renderOptionsChain();
+    });
+  });
+}
+
+document.querySelectorAll('.rail-tab').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    state.rightTab = btn.dataset.tab;
+    document.querySelectorAll('.rail-tab').forEach(b=>b.classList.toggle('active', b===btn));
+    renderRightPane();
+  });
+});
+
 function renderAll(){
   renderPriceReadout();
-  renderRightRail();
+  renderRightPane();
   renderNewsFeed();
   renderTimeline();
   renderTimelineEvents();
@@ -2390,8 +2626,10 @@ rebuildGlobeMarkers();
 renderAll();
 
 // best-effort live data — never blocks the UI, silently falls back on failure
-refreshFacilityWeather(COMMODITIES.find(c=>c.id===state.selected));
-refreshLivePrices();
+checkBackend().then(()=>{
+  refreshFacilityWeather(COMMODITIES.find(c=>c.id===state.selected));
+  refreshLivePrices();
+});
 setInterval(refreshLivePrices, 5*60*1000);
 setInterval(()=>refreshFacilityWeather(COMMODITIES.find(c=>c.id===state.selected)), 10*60*1000);
 
