@@ -147,15 +147,22 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
   font-family:var(--mono);font-size:11px;padding:6px 4px;cursor:pointer;
 }
 .opt-exp-btn.active{color:var(--cyan);border-color:var(--cyan-dim);background:rgba(53,214,240,.06);}
-.opt-row{border:1px solid var(--line);padding:7px 9px;margin-bottom:7px;}
+.opt-chain-head{display:grid;grid-template-columns:1fr 64px 1fr;font-size:10px;letter-spacing:.1em;color:var(--text-faint);padding:0 2px 6px;}
+.opt-chain-head .h-call{text-align:right;color:var(--green);}
+.opt-chain-head .h-put{text-align:left;color:var(--red);}
+.opt-chain-head .h-strike{text-align:center;}
+.opt-row{
+  display:grid;grid-template-columns:1fr 64px 1fr;align-items:center;
+  border:1px solid var(--line);padding:7px 6px;margin-bottom:6px;gap:4px;
+}
 .opt-row.atm{border-color:var(--cyan-dim);background:rgba(53,214,240,.05);}
-.opt-strike{font-size:13.5px;font-weight:700;color:var(--text);margin-bottom:5px;display:flex;align-items:center;gap:7px;}
-.opt-strike .atm-tag{font-size:9px;font-weight:700;background:var(--cyan);color:#04222a;padding:1px 5px;letter-spacing:.05em;}
-.opt-side{display:grid;grid-template-columns:36px 1fr 1fr 1fr 1fr;gap:5px;font-size:11px;padding:3px 0;align-items:center;}
-.opt-side .opt-label{font-weight:700;font-size:10px;letter-spacing:.04em;}
-.opt-side.call{color:var(--green);}
-.opt-side.put{color:var(--red);}
-.opt-side .opt-val{color:var(--text);font-weight:500;}
+.opt-strike{font-size:13.5px;font-weight:700;color:var(--text);text-align:center;}
+.opt-strike .atm-tag{display:block;font-size:8px;font-weight:700;background:var(--cyan);color:#04222a;padding:1px 4px;letter-spacing:.05em;margin-top:2px;}
+.opt-side{line-height:1.4;}
+.opt-side.call{text-align:right;color:var(--green);}
+.opt-side.put{text-align:left;color:var(--red);}
+.opt-side .opt-last{font-size:13.5px;font-weight:700;}
+.opt-side .opt-sub{font-size:9.5px;color:var(--text-dim);letter-spacing:.02em;}
 
 .section-label{
   font-size:12px;letter-spacing:.16em;color:var(--text-dim);text-transform:uppercase;
@@ -263,6 +270,23 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
 .legend i{width:7px;height:7px;display:inline-block;border-radius:50%;}
 .legend i.sq{border-radius:1px;transform:rotate(45deg);}
 
+/* candlestick modal */
+.modal-overlay{
+  position:fixed;inset:0;z-index:200;background:rgba(2,4,6,.78);
+  display:none;align-items:center;justify-content:center;
+}
+.modal-overlay.open{display:flex;}
+.modal-panel{
+  width:940px;max-width:94vw;padding:16px 18px;
+}
+.modal-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+.modal-head span:first-child{font-size:15px;letter-spacing:.06em;color:var(--cyan);font-weight:700;}
+.modal-sub{font-size:11px;color:var(--text-faint);letter-spacing:.06em;}
+.modal-close{background:none;border:1px solid var(--line-bright);color:var(--text-dim);font-size:14px;padding:4px 10px;cursor:pointer;}
+.modal-close:hover{color:var(--text);border-color:var(--cyan-dim);}
+#candleCanvas{width:100%;height:auto;display:block;}
+.modal-foot{font-size:10.5px;color:var(--text-faint);margin-top:8px;line-height:1.4;}
+
 #tooltip{
   position:fixed;pointer-events:none;z-index:60;
   border:1px solid var(--cyan-dim);
@@ -286,9 +310,10 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
 }
 .place-label.facility{background:#0d1a1f;font-weight:600;}
 .place-label.country{
-  background:rgba(6,10,13,.55);border:none;border-left:none;
-  color:#7f97a3;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
-  padding:1px 4px;box-shadow:none;
+  background:#0a1216;border:none;border-left:none;
+  color:#9bb4bf;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  padding:2px 5px;box-shadow:0 1px 4px rgba(0,0,0,.7);
+  text-shadow:0 1px 2px rgba(0,0,0,.9);
 }
 
 /* Google-Earth-style info popup — shows the actual headline at the spot it happened,
@@ -323,11 +348,18 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
 
 /* news feed float */
 .news-float{
-  position:absolute;bottom:12px;right:12px;width:340px;max-height:280px;min-width:240px;min-height:160px;
-  max-width:600px;
-  overflow:auto;resize:both;
+  position:absolute;bottom:12px;right:12px;width:340px;height:280px;min-width:240px;min-height:160px;
+  max-width:640px;max-height:560px;
+  overflow:hidden;
   display:flex;flex-direction:column;
 }
+.resize-handle{
+  position:absolute;right:1px;bottom:1px;width:18px;height:18px;cursor:nwse-resize;z-index:25;
+  background:
+    linear-gradient(135deg, transparent 0 42%, var(--cyan) 42% 50%, transparent 50% 62%, var(--cyan) 62% 70%, transparent 70% 82%, var(--cyan) 82% 90%, transparent 90%);
+  opacity:.7;
+}
+.resize-handle:hover{opacity:1;}
 .news-float .nf-head{padding:7px 10px;border-bottom:1px solid var(--line);font-size:12px;letter-spacing:.14em;color:var(--text-dim);display:flex;justify-content:space-between;}
 .news-float .nf-list{overflow-y:auto;flex:1;}
 .news-item{padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.03);}
@@ -448,7 +480,7 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
           <span class="src-badge" id="topSrcBadge">SIM</span>
         </div>
       </div>
-      <div id="sparkWrap"><canvas id="sparkCanvas" width="96" height="34"></canvas></div>
+      <div id="sparkWrap" title="Click for candlestick chart"><canvas id="sparkCanvas" width="96" height="34"></canvas></div>
     </div>
     <div class="clock">
       <div class="t" id="clockT">--:--:--</div>
@@ -515,9 +547,10 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
       </div>
       <div id="placeLabelLayer"></div>
       <div id="hoverReadout" class="glass"></div>
-      <div class="news-float glass">
+      <div class="news-float glass" id="newsFloat">
         <div class="nf-head"><span>EVENT FEED</span><span id="nfCount">0 ACTIVE</span></div>
         <div class="nf-list scroll" id="newsFeedList"></div>
+        <div class="resize-handle" id="newsResizeHandle"></div>
       </div>
     </main>
 
@@ -553,6 +586,17 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
     </div>
   </footer>
 
+</div>
+
+<div id="candleModalOverlay" class="modal-overlay">
+  <div class="modal-panel glass">
+    <div class="modal-head">
+      <div><span id="candleTitle">WTI CRUDE OIL</span> <span class="modal-sub">— DAILY, LAST 30 SESSIONS</span></div>
+      <button id="candleClose" class="modal-close">✕</button>
+    </div>
+    <canvas id="candleCanvas" width="900" height="440"></canvas>
+    <div class="modal-foot">Candles built from this session's simulated hourly series (open/high/low/close per day). Not real historical data — see chat for why free historical commodity data doesn't exist.</div>
+  </div>
 </div>
 
 <div id="tooltip"></div>
@@ -1185,6 +1229,86 @@ function drawSparkline(commodityId){
   ctx.fill();
 }
 
+/* =========================================================================
+   CANDLESTICK MODAL — built from this session's own simulated hourly series
+   (open/high/low/close per day). Opens when the top-bar sparkline is clicked.
+========================================================================= */
+function buildDailyCandles(commodityId, idx){
+  const series = WORLD[commodityId].series;
+  const days = Math.min(30, Math.floor(idx/24));
+  const candles = [];
+  for(let d=days-1; d>=0; d--){
+    const endH = idx - d*24;
+    const startH = Math.max(0, endH-23);
+    const slice = series.slice(startH, endH+1);
+    if(slice.length<2) continue;
+    candles.push({
+      open: slice[0], close: slice[slice.length-1],
+      high: Math.max(...slice), low: Math.min(...slice),
+      date: hourToDate(endH)
+    });
+  }
+  return candles;
+}
+
+function drawCandlestickChart(commodityId){
+  const c = COMMODITIES.find(c=>c.id===commodityId);
+  const canvas = $('candleCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  const candles = buildDailyCandles(commodityId, state.hourIdx);
+  if(candles.length<2) return;
+
+  const padL=64, padR=16, padT=16, padB=28;
+  const plotW = W-padL-padR, plotH = H-padT-padB;
+  const lo = Math.min(...candles.map(k=>k.low));
+  const hi = Math.max(...candles.map(k=>k.high));
+  const range = (hi-lo)||1;
+  const yOf = v => padT + plotH - ((v-lo)/range)*plotH;
+  const slot = plotW/candles.length;
+  const bodyW = Math.max(3, slot*0.55);
+
+  // gridlines + price axis labels
+  ctx.strokeStyle = 'rgba(120,200,210,.12)'; ctx.lineWidth = 1;
+  ctx.fillStyle = 'rgba(180,200,205,.7)'; ctx.font = '11px monospace'; ctx.textAlign='right';
+  for(let i=0;i<=4;i++){
+    const v = lo + (range*i/4);
+    const y = yOf(v);
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(W-padR,y); ctx.stroke();
+    ctx.fillText(fmt(v, v<10?3:1), padL-8, y+4);
+  }
+
+  candles.forEach((k,i)=>{
+    const x = padL + i*slot + slot/2;
+    const up = k.close>=k.open;
+    ctx.strokeStyle = up ? '#3ddc84' : '#ff5c5c';
+    ctx.fillStyle = up ? '#3ddc84' : '#ff5c5c';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(x, yOf(k.high)); ctx.lineTo(x, yOf(k.low)); ctx.stroke();
+    const bodyTop = yOf(Math.max(k.open,k.close));
+    const bodyH = Math.max(1.5, Math.abs(yOf(k.open)-yOf(k.close)));
+    ctx.fillRect(x-bodyW/2, bodyTop, bodyW, bodyH);
+    if(i%Math.ceil(candles.length/8)===0){
+      ctx.fillStyle = 'rgba(160,180,188,.7)'; ctx.font='10px monospace'; ctx.textAlign='center';
+      ctx.fillText(k.date.toLocaleDateString(undefined,{month:'short',day:'numeric'}), x, H-10);
+    }
+  });
+
+  $('candleTitle').textContent = c.name.toUpperCase();
+}
+
+function openCandleModal(){
+  drawCandlestickChart(state.selected);
+  $('candleModalOverlay').classList.add('open');
+}
+$('sparkWrap').addEventListener('click', openCandleModal);
+$('candleClose').addEventListener('click', ()=> $('candleModalOverlay').classList.remove('open'));
+$('candleModalOverlay').addEventListener('click', e=>{
+  if(e.target.id==='candleModalOverlay') $('candleModalOverlay').classList.remove('open');
+});
+
 function tickClock(){
   const now = new Date();
   $('clockT').textContent = now.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -1501,29 +1625,24 @@ function renderOptionsChain(){
   const chain = buildOptionChain(c.id, state.hourIdx, state.optionExpiryDays);
 
   let html = `
-    <div class="opt-disclaimer"><b>SIMULATED.</b> Black-Scholes pricing on a synthetic volatility surface — there is no free options-data source (real chains need a paid OPRA/CBOE-derived feed). Treat strikes, IV, and OI here as illustrative only.</div>
+    <div class="opt-disclaimer"><b>SIMULATED.</b> Black-Scholes pricing on a synthetic volatility surface — there is no free options-data source (real chains need a paid OPRA/CBOE-derived feed, and sites like Barchart prohibit scraping in their terms of use). Treat strikes, IV, and OI here as illustrative only.</div>
     <div class="opt-meta"><span>UNDERLYING — ${c.name}</span><b>${fmt(S, S<10?3:2)} ${c.unit}</b></div>
     <div class="opt-expiry-row">
       ${OPTION_EXPIRIES.map(e=>`<button class="opt-exp-btn${e.days===state.optionExpiryDays?' active':''}" data-days="${e.days}">${e.label}</button>`).join('')}
     </div>
+    <div class="opt-chain-head"><span class="h-call">CALLS</span><span class="h-strike">STRIKE</span><span class="h-put">PUTS</span></div>
   `;
   chain.forEach(row=>{
     html += `
       <div class="opt-row${row.isATM?' atm':''}">
-        <div class="opt-strike">${fmt(row.strike, row.strike<10?2:0)}${row.isATM?'<span class="atm-tag">ATM</span>':''}</div>
         <div class="opt-side call">
-          <span class="opt-label">CALL</span>
-          <span class="opt-val">${fmt(row.callPrice,2)}</span>
-          <span>Δ${row.callDelta.toFixed(2)}</span>
-          <span>${(row.iv*100).toFixed(0)}% IV</span>
-          <span>${row.callOI.toLocaleString()} OI</span>
+          <div class="opt-last">${fmt(row.callPrice,2)}</div>
+          <div class="opt-sub">Δ${row.callDelta.toFixed(2)} · ${(row.iv*100).toFixed(0)}% IV · ${row.callOI.toLocaleString()} OI</div>
         </div>
+        <div class="opt-strike">${fmt(row.strike, row.strike<10?2:0)}${row.isATM?'<span class="atm-tag">ATM</span>':''}</div>
         <div class="opt-side put">
-          <span class="opt-label">PUT</span>
-          <span class="opt-val">${fmt(row.putPrice,2)}</span>
-          <span>Δ${row.putDelta.toFixed(2)}</span>
-          <span>${(row.iv*100).toFixed(0)}% IV</span>
-          <span>${row.putOI.toLocaleString()} OI</span>
+          <div class="opt-last">${fmt(row.putPrice,2)}</div>
+          <div class="opt-sub">Δ${row.putDelta.toFixed(2)} · ${(row.iv*100).toFixed(0)}% IV · ${row.putOI.toLocaleString()} OI</div>
         </div>
       </div>`;
   });
@@ -1824,17 +1943,24 @@ function buildHeatmapTexture(commodityId, idx){
     const net = clamp(evs.reduce((a,e)=>a+e.sentiment*e.magnitude,0), -2.2, 2.2);
     const capWeight = 0.4 + 0.6*(f.cap/maxCap);
     const [x,y] = proj(f.lat, f.lon);
-    const r = 95*capWeight*(0.6+Math.abs(net)*0.45);
+    const r = 130*capWeight*(0.7+Math.abs(net)*0.5);
     const col = net>=0 ? '61,220,132' : '255,92,92';
-    const alpha = clamp(0.16+Math.abs(net)*0.22, 0.14, 0.55);
-    const g = ctx.createRadialGradient(x,y,0,x,y,r);
-    g.addColorStop(0, `rgba(${col},${alpha})`);
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
-    // wrap-around bleed so blobs near the date line don't clip
-    if(x<120){ ctx.beginPath(); ctx.arc(x+W,y,r,0,Math.PI*2); ctx.fill(); }
-    if(x>W-120){ ctx.beginPath(); ctx.arc(x-W,y,r,0,Math.PI*2); ctx.fill(); }
+    const alpha = clamp(0.55+Math.abs(net)*0.3, 0.5, 0.95);
+    const drawBlob = (cx)=>{
+      const g = ctx.createRadialGradient(cx,y,0,cx,y,r);
+      g.addColorStop(0, `rgba(${col},${alpha})`);
+      g.addColorStop(0.55, `rgba(${col},${alpha*0.55})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(cx,y,r,0,Math.PI*2); ctx.fill();
+      // bright rim so the hotspot reads clearly even against light terrain/cloud
+      ctx.strokeStyle = `rgba(${col},0.95)`;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx,y,r*0.32,0,Math.PI*2); ctx.stroke();
+    };
+    drawBlob(x);
+    if(x<150) drawBlob(x+W);
+    if(x>W-150) drawBlob(x-W);
   });
 
   const tex = new THREE.CanvasTexture(cv);
@@ -2014,7 +2140,7 @@ function initGlobe(){
   // commodity-impact heatmap shell — texture is (re)generated on demand by updateHeatmap()
   heatmapMesh = new THREE.Mesh(
     new THREE.SphereGeometry(R*1.03, 64, 48),
-    new THREE.MeshBasicMaterial({transparent:true, opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false})
+    new THREE.MeshBasicMaterial({transparent:true, opacity:1, depthWrite:false})
   );
   heatmapMesh.visible = false;
   globeGroup.add(heatmapMesh);
@@ -2365,7 +2491,7 @@ function rebuildTankers(){
   routeCurves.forEach(curve=>{
     const count = 2;
     for(let k=0;k<count;k++){
-      const ship = makeShipSprite('rgba(235,240,245,0.95)', 0.34);
+      const ship = makeShipSprite('rgba(255,196,90,1)', 0.5);
       const name = `${pick(rng,VESSEL_NAME_A)} ${pick(rng,VESSEL_NAME_B)}`;
       ship.userData = {
         type:'tanker', curve, t: rng(), speed: 0.012 + rng()*0.01,
@@ -2373,6 +2499,12 @@ function rebuildTankers(){
       };
       tankerGroup.add(ship);
       tankerSprites.push(ship);
+
+      // tiny persistent wake ring so a slow-moving ship is never just a single hard-to-spot dot
+      const wake = makeRingSprite('rgba(255,196,90,0.8)', 0.34);
+      wake.material.opacity = 0.5;
+      tankerGroup.add(wake);
+      ship.userData.wake = wake;
     }
   });
   tankerGroup.visible = true;
@@ -2550,6 +2682,7 @@ function animate(){
       const ud = spr.userData;
       ud.t = (ud.t + ud.speed*0.016) % 1;
       spr.position.copy(ud.curve.getPoint(ud.t));
+      if(ud.wake) ud.wake.position.copy(spr.position);
     });
   }
 
@@ -2609,6 +2742,41 @@ document.querySelectorAll('#speedGrp button').forEach(btn=>{
     state.speed = parseInt(btn.dataset.spd,10);
   });
 });
+
+/* =========================================================================
+   PANEL RESIZE — hand-rolled instead of relying on native CSS `resize`,
+   which turned out to be unreliable across browsers/zoom levels for this
+   layout. Freezes the panel's current screen position as top/left so
+   growing width/height behaves the way you'd expect (handle follows
+   the cursor as the panel grows toward the bottom-right).
+========================================================================= */
+function makeResizable(panel, handle, opts={}){
+  const minW=opts.minW||240, minH=opts.minH||160, maxW=opts.maxW||640, maxH=opts.maxH||560;
+  const rect = panel.getBoundingClientRect();
+  panel.style.top = rect.top+'px';
+  panel.style.left = rect.left+'px';
+  panel.style.right = 'auto';
+  panel.style.bottom = 'auto';
+  panel.style.width = rect.width+'px';
+  panel.style.height = rect.height+'px';
+
+  let dragging=false, startX=0, startY=0, startW=0, startH=0;
+  handle.addEventListener('pointerdown', e=>{
+    dragging = true; startX=e.clientX; startY=e.clientY;
+    startW = panel.offsetWidth; startH = panel.offsetHeight;
+    handle.setPointerCapture(e.pointerId);
+    e.preventDefault(); e.stopPropagation();
+  });
+  handle.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    const dx = e.clientX-startX, dy = e.clientY-startY;
+    panel.style.width = clamp(startW+dx, minW, maxW)+'px';
+    panel.style.height = clamp(startH+dy, minH, maxH)+'px';
+  });
+  handle.addEventListener('pointerup', ()=>{ dragging=false; });
+  handle.addEventListener('pointercancel', ()=>{ dragging=false; });
+}
+makeResizable($('newsFloat'), $('newsResizeHandle'), {minW:240, minH:160, maxW:640, maxH:560});
 
 /* =========================================================================
    MOBILE RAIL TOGGLE
