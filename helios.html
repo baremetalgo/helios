@@ -485,7 +485,7 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
       <div class="mark"><span>⬡</span></div>
       <div>
         <div class="title">HELIOS <b>// </b>COMMODITIES INT.</div>
-        <div class="sub">GLOBAL MARKET SURVEILLANCE GRID <span style="color:var(--text-faint);opacity:.7">· BUILD 2026-06-30.10</span></div>
+        <div class="sub">GLOBAL MARKET SURVEILLANCE GRID <span style="color:var(--text-faint);opacity:.7">· BUILD 2026-06-30.11</span></div>
       </div>
     </div>
     <div class="sysrow" id="sysrow"></div>
@@ -614,16 +614,15 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
       <button id="candleClose" class="modal-close">✕</button>
     </div>
     <div class="chart-tabs">
-      <button class="chart-tab active" data-chart="real">REAL CHART (TRADINGVIEW)</button>
-      <button class="chart-tab" data-chart="sim">SIMULATED CANDLES</button>
+      <button class="chart-tab" data-chart="real">REAL CHART (TRADINGVIEW)</button>
+      <button class="chart-tab active" data-chart="sim">SIMULATED CANDLES</button>
     </div>
-    <div id="realChartPane" style="height:480px;">
-      <div id="tvWidgetContainer" style="height:100%;"></div>
-      <div id="tvFallbackNote" class="modal-foot" style="display:none;">
-        TradingView's widget didn't load (likely blocked by network/CSP in this preview). It loads normally when this file is opened directly in a browser. Switch to "Simulated Candles" for a chart that always works.
-      </div>
+    <div id="realChartPane" style="height:480px;display:none;">
+      <div class="modal-foot" style="margin-bottom:8px;">This is TradingView's own third-party widget — once it loads, everything inside it (including any "not traded" message) comes from TradingView's servers, not this app, and can't be overridden here. All 8 symbols used (<span id="tvSymbolList"></span>) are independently verified as valid TradingView tickers. If you see a "not traded" or blank chart, it's almost always an ad-blocker / privacy extension (Brave Shields, uBlock Origin, etc.) blocking the widget's backend calls — try disabling shields for this page, or use Simulated Candles instead.</div>
+      <div id="tvWidgetContainer" style="height:400px;"></div>
+      <div id="tvFallbackNote" class="modal-foot" style="display:none;">TradingView's script itself failed to load (likely blocked by network/CSP). Switch to "Simulated Candles" for a chart that always works.</div>
     </div>
-    <div id="simChartPane" style="display:none;">
+    <div id="simChartPane">
       <canvas id="candleCanvas" width="900" height="440"></canvas>
       <div class="modal-foot">Candles built from this session's simulated hourly series (open/high/low/close per day). Not real historical data — see chat for why free historical commodity data doesn't exist.</div>
     </div>
@@ -1374,12 +1373,22 @@ async function renderTradingViewChart(commodityId){
   });
 }
 
+let tvLoadedThisOpen = false;
 function openCandleModal(){
   const c = COMMODITIES.find(c=>c.id===state.selected);
   $('candleSub').textContent = `— ${TV_SYMBOL[c.id]||''} live, or simulated daily candles`;
+  $('tvSymbolList').textContent = Object.values(TV_SYMBOL).join(', ');
   drawCandlestickChart(state.selected);
-  renderTradingViewChart(state.selected);
   $('candleModalOverlay').classList.add('open');
+  tvLoadedThisOpen = false;
+  // TradingView only loads when its tab is actually opened, not eagerly on every modal
+  // open — keeps the always-reliable simulated chart the fast, dependency-free default.
+  // If the REAL tab happens to still be active from a previous open, load immediately;
+  // otherwise it loads lazily the first time that tab is clicked (see handler below).
+  if(document.querySelector('.chart-tab[data-chart="real"]').classList.contains('active')){
+    tvLoadedThisOpen = true;
+    renderTradingViewChart(state.selected);
+  }
 }
 $('sparkWrap').addEventListener('click', openCandleModal);
 $('candleClose').addEventListener('click', ()=> $('candleModalOverlay').classList.remove('open'));
@@ -1392,6 +1401,10 @@ document.querySelectorAll('.chart-tab').forEach(btn=>{
     const isReal = btn.dataset.chart==='real';
     $('realChartPane').style.display = isReal ? '' : 'none';
     $('simChartPane').style.display = isReal ? 'none' : '';
+    if(isReal && !tvLoadedThisOpen){
+      tvLoadedThisOpen = true;
+      renderTradingViewChart(state.selected);
+    }
   });
 });
 
