@@ -485,7 +485,7 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
       <div class="mark"><span>⬡</span></div>
       <div>
         <div class="title">HELIOS <b>// </b>COMMODITIES INT.</div>
-        <div class="sub">GLOBAL MARKET SURVEILLANCE GRID <span style="color:var(--text-faint);opacity:.7">· BUILD 2026-06-30.9</span></div>
+        <div class="sub">GLOBAL MARKET SURVEILLANCE GRID <span style="color:var(--text-faint);opacity:.7">· BUILD 2026-06-30.10</span></div>
       </div>
     </div>
     <div class="sysrow" id="sysrow"></div>
@@ -551,8 +551,8 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
         <button class="layer-btn on" data-layer="weather"><span class="ind"></span>WEATHER</button>
         <button class="layer-btn on" data-layer="macro"><span class="ind"></span>MACRO</button>
         <button class="layer-btn on" data-layer="clouds"><span class="ind"></span>CLOUDS</button>
-        <button class="layer-btn" data-layer="heatmap"><span class="ind"></span>HEATMAP</button>
-        <button class="layer-btn" data-layer="tankers"><span class="ind"></span>TANKERS</button>
+        <button class="layer-btn on" data-layer="heatmap"><span class="ind"></span>HEATMAP</button>
+        <button class="layer-btn on" data-layer="tankers"><span class="ind"></span>TANKERS</button>
         <button class="layer-btn on" data-layer="routes"><span class="ind"></span>ROUTES</button>
         <button class="layer-btn on" data-layer="labels"><span class="ind"></span>LABELS</button>
         <button class="layer-btn on" data-layer="rotate"><span class="ind"></span>ROTATE</button>
@@ -1140,7 +1140,7 @@ const state = {
   hourIdx: TOTAL_HOURS,
   playing: false,
   speed: 4,
-  layers: { facilities:true, news:true, weather:true, macro:true, clouds:true, routes:true, labels:true, rotate:true, heatmap:false, tankers:false },
+  layers: { facilities:true, news:true, weather:true, macro:true, clouds:true, routes:true, labels:true, rotate:true, heatmap:true, tankers:true },
   hoverPlace: null,
   rightTab: 'prediction',
   optionExpiryDays: 30,
@@ -2048,7 +2048,7 @@ function buildHeatmapTexture(commodityId, idx){
   // paint the low-res grid as overlapping soft circles directly at full resolution —
   // gives a continuous, organic-looking field without a second canvas/blur pass
   const cellW = W/gridW, cellH = H/gridH;
-  const r = Math.max(cellW, cellH) * 1.65;
+  const r = Math.max(cellW, cellH) * 2.4;
   for(let gy=0; gy<gridH; gy++){
     for(let gx=0; gx<gridW; gx++){
       const v = field[gy*gridW+gx];
@@ -2056,9 +2056,12 @@ function buildHeatmapTexture(commodityId, idx){
       const x = gx*cellW + cellW/2;
       const y = gy*cellH + cellH/2;
       const col = v>=0 ? '61,220,132' : '255,92,92';
-      const alpha = clamp(Math.abs(v)*0.32, 0.03, 0.5);
+      // any present signal gets a real, clearly-visible floor opacity (was scaling
+      // continuously from near-zero, which is exactly what made this "barely visible")
+      const alpha = clamp(0.32 + Math.abs(v)*0.42, 0.32, 0.88);
       const g = ctx.createRadialGradient(x,y,0,x,y,r);
       g.addColorStop(0, `rgba(${col},${alpha})`);
+      g.addColorStop(0.6, `rgba(${col},${alpha*0.5})`);
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
@@ -2071,9 +2074,11 @@ function buildHeatmapTexture(commodityId, idx){
   sources.forEach(s=>{
     const [x,y] = proj(s.lat, s.lon);
     const col = s.net>=0 ? '61,220,132' : '255,92,92';
+    ctx.fillStyle = `rgba(${col},0.95)`;
+    ctx.beginPath(); ctx.arc(x,y,6,0,Math.PI*2); ctx.fill();
     ctx.strokeStyle = `rgba(${col},0.95)`;
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(x,y, 14,0,Math.PI*2); ctx.stroke();
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(x,y, 16,0,Math.PI*2); ctx.stroke();
   });
 
   ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
@@ -2635,9 +2640,9 @@ function rebuildTankers(){
   const rng = mulberry32(hashStr(c.id+'-tankers'));
   const vesselType = VESSEL_TYPE[c.id] || 'Cargo Vessel';
   routeCurves.forEach(curve=>{
-    const count = 2;
+    const count = 3;
     for(let k=0;k<count;k++){
-      const ship = makeShipSprite('rgba(255,196,90,1)', 0.55);
+      const ship = makeShipSprite('rgba(255,196,90,1)', 0.7);
       ship.renderOrder = 40;
       const name = `${pick(rng,VESSEL_NAME_A)} ${pick(rng,VESSEL_NAME_B)}`;
       ship.userData = {
@@ -2648,7 +2653,7 @@ function rebuildTankers(){
       tankerSprites.push(ship);
 
       // tiny persistent wake ring so a slow-moving ship is never just a single hard-to-spot dot
-      const wake = makeRingSprite('rgba(255,196,90,0.8)', 0.36);
+      const wake = makeRingSprite('rgba(255,196,90,0.8)', 0.46);
       wake.material.opacity = 0.5;
       wake.renderOrder = 39;
       tankerGroup.add(wake);
