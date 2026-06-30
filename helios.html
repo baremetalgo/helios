@@ -485,7 +485,7 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
       <div class="mark"><span>⬡</span></div>
       <div>
         <div class="title">HELIOS <b>// </b>COMMODITIES INT.</div>
-        <div class="sub">GLOBAL MARKET SURVEILLANCE GRID <span style="color:var(--text-faint);opacity:.7">· BUILD 2026-06-30.8</span></div>
+        <div class="sub">GLOBAL MARKET SURVEILLANCE GRID <span style="color:var(--text-faint);opacity:.7">· BUILD 2026-06-30.9</span></div>
       </div>
     </div>
     <div class="sysrow" id="sysrow"></div>
@@ -1333,7 +1333,7 @@ function drawCandlestickChart(commodityId){
 /* best-effort real chart via TradingView's free embeddable widget — works normally when this
    file is opened directly in a browser; may be blocked by CSP inside a sandboxed preview, in
    which case the fallback note appears and the always-working simulated tab is right there. */
-const TV_SYMBOL = { wti:'NYMEX:CL1!', brent:'ICEEUR:LCO1!', ng:'NYMEX:NG1!', cu:'COMEX:HG1!', au:'COMEX:GC1!', ag:'COMEX:SI1!', wheat:'CBOT:ZW1!', coffee:'ICEUS:KC1!' };
+const TV_SYMBOL = { wti:'NYMEX:CL1!', brent:'ICEEUR:BRN1!', ng:'NYMEX:NG1!', cu:'COMEX:HG1!', au:'COMEX:GC1!', ag:'COMEX:SI1!', wheat:'CBOT:ZW1!', coffee:'ICEUS:KC1!' };
 let tvScriptPromise = null;
 function loadTradingViewScript(){
   if(tvScriptPromise) return tvScriptPromise;
