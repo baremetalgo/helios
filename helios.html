@@ -485,7 +485,7 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
       <div class="mark"><span>⬡</span></div>
       <div>
         <div class="title">HELIOS <b>// </b>COMMODITIES INT.</div>
-        <div class="sub">GLOBAL MARKET SURVEILLANCE GRID <span style="color:var(--text-faint);opacity:.7">· BUILD 2026-06-30.12</span></div>
+        <div class="sub">GLOBAL MARKET SURVEILLANCE GRID <span style="color:var(--text-faint);opacity:.7">· BUILD 2026-06-30.13</span></div>
       </div>
     </div>
     <div class="sysrow" id="sysrow"></div>
@@ -556,6 +556,7 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
         <button class="layer-btn on" data-layer="routes"><span class="ind"></span>ROUTES</button>
         <button class="layer-btn on" data-layer="labels"><span class="ind"></span>LABELS</button>
         <button class="layer-btn on" data-layer="rotate"><span class="ind"></span>ROTATE</button>
+        <button class="layer-btn" id="centerGlobeBtn"><span class="ind" style="background:var(--cyan);border-color:var(--cyan)"></span>CENTER</button>
       </div>
       <div class="legend glass">
         <span><i style="background:var(--cyan)"></i>FACILITY</span>
@@ -1209,6 +1210,7 @@ function selectCommodity(id){
   rebuildGlobeMarkers();
   $('globeSelLabel').textContent = COMMODITIES.find(c=>c.id===id).name.toUpperCase();
   refreshFacilityWeather(COMMODITIES.find(c=>c.id===id));
+  centerGlobeOnCommodity(COMMODITIES.find(c=>c.id===id));
 }
 
 /* =========================================================================
@@ -1808,6 +1810,33 @@ function latLonToVec3(lat, lon, r){
   );
 }
 
+/* rotates globeGroup so the given lat/lon faces the camera head-on. Solves a recurring
+   issue: tanker ships (and other markers) only exist along a commodity's own facility
+   routes, which are inherently regional — if the globe happens to be showing the opposite
+   hemisphere when you switch commodities, there's nothing to see there even though the
+   layer is working correctly. Called automatically on every commodity switch and from the
+   manual "CENTER" button, so this stops being something the user has to discover by
+   trial-and-error rotation. */
+function centerGlobeOn(lat, lon){
+  if(!globeGroup) return;
+  const v = latLonToVec3(lat, lon, 1);
+  const targetY = Math.atan2(-v.x, v.z);
+  globeGroup.rotation.y = targetY;
+}
+function centerGlobeOnCommodity(commodity){
+  if(!commodity.facilities || !commodity.facilities.length) return;
+  const avgLat = commodity.facilities.reduce((a,f)=>a+f.lat,0)/commodity.facilities.length;
+  // average longitude needs circular averaging, not a plain mean, or facilities spanning
+  // the ±180° seam would average to the wrong side of the planet
+  let sumSin=0, sumCos=0;
+  commodity.facilities.forEach(f=>{
+    const rad = f.lon*Math.PI/180;
+    sumSin += Math.sin(rad); sumCos += Math.cos(rad);
+  });
+  const avgLon = Math.atan2(sumSin, sumCos)*180/Math.PI;
+  centerGlobeOn(avgLat, avgLon);
+}
+
 /* smooth chord-on-sphere interpolation between two lat/lon points (visual approx of great circle) */
 function arcSegment(latlon1, latlon2, r, segments){
   const p1 = latLonToVec3(latlon1[0], latlon1[1], r);
@@ -2047,9 +2076,8 @@ function buildHeatmapTexture(commodityId, idx){
 
   // low-res field grid, computed once, then written as actual pixels (not stacked shapes)
   const gridW = 160, gridH = 80;
-  const small = document.createElement('canvas'); small.width=gridW; small.height=gridH;
-  const sctx = small.getContext('2d');
-  const img = sctx.createImageData(gridW, gridH);
+  const field = new Float32Array(gridW*gridH);
+  let maxAbs = 0.0001; // tiny floor so a totally flat field never divides by zero
   for(let gy=0; gy<gridH; gy++){
     const lat = 90 - (gy/(gridH-1))*180;
     for(let gx=0; gx<gridW; gx++){
@@ -2061,19 +2089,34 @@ function buildHeatmapTexture(commodityId, idx){
         const iw = 1/(d*d);
         wsum += iw; vsum += iw*s.net;
       });
-      const v = clamp((vsum/wsum)*0.62 + macroBase*0.38, -2, 2);
-      const i = (gy*gridW+gx)*4;
-      if(Math.abs(v) < 0.04){
-        img.data[i+3] = 0; // fully transparent — no signal here
-      } else {
-        const isPos = v>=0;
-        img.data[i]   = isPos ? 61  : 255;
-        img.data[i+1] = isPos ? 220 : 92;
-        img.data[i+2] = isPos ? 132 : 92;
-        // single direct write, no compositing — this exact value is what renders,
-        // it cannot be amplified by overlap the way the old shape-stacking could
-        img.data[i+3] = Math.round(clamp(28 + Math.abs(v)*70, 22, 150));
-      }
+      const v = (vsum/wsum)*0.62 + macroBase*0.38;
+      field[gy*gridW+gx] = v;
+      if(Math.abs(v) > maxAbs) maxAbs = Math.abs(v);
+    }
+  }
+
+  // SECOND pass: color relative to the field's own actual range this time, not an
+  // absolute threshold. A fixed cutoff like |v|<0.04 meant that whenever a commodity's
+  // recent events happened to roughly cancel out (bullish/bearish headlines balancing,
+  // which is common), the WHOLE heatmap rendered as literally nothing, everywhere — not
+  // "subtle," fully transparent. Normalizing guarantees the strongest region on the
+  // planet right now always reads clearly, whatever its absolute magnitude happens to be.
+  const small = document.createElement('canvas'); small.width=gridW; small.height=gridH;
+  const sctx = small.getContext('2d');
+  const img = sctx.createImageData(gridW, gridH);
+  for(let p=0; p<field.length; p++){
+    const vn = clamp(field[p]/maxAbs, -1, 1); // normalized -1..1 relative to today's actual range
+    const i = p*4;
+    if(Math.abs(vn) < 0.02){
+      img.data[i+3] = 0;
+    } else {
+      const isPos = vn>=0;
+      img.data[i]   = isPos ? 61  : 255;
+      img.data[i+1] = isPos ? 220 : 92;
+      img.data[i+2] = isPos ? 132 : 92;
+      // single direct write, no compositing — this exact value is what renders,
+      // it cannot be amplified by overlap the way the old shape-stacking could
+      img.data[i+3] = Math.round(clamp(24 + Math.abs(vn)*130, 24, 154));
     }
   }
   sctx.putImageData(img, 0, 0);
@@ -2976,6 +3019,10 @@ function makeDraggable(panel, handle){
 makeResizable($('newsFloat'), $('newsResizeHandle'), {minW:240, minH:160, maxW:640, maxH:560});
 makeDraggable($('newsFloat'), $('newsFloat').querySelector('.nf-head'));
 
+$('centerGlobeBtn').addEventListener('click', ()=>{
+  centerGlobeOnCommodity(COMMODITIES.find(c=>c.id===state.selected));
+});
+
 /* =========================================================================
    MOBILE RAIL TOGGLE
 ========================================================================= */
@@ -2990,6 +3037,7 @@ buildCommoditySelect();
 initGlobe();
 rebuildGlobeMarkers();
 renderAll();
+centerGlobeOnCommodity(COMMODITIES.find(c=>c.id===state.selected));
 
 // best-effort live data — never blocks the UI, silently falls back on failure
 checkBackend().then(()=>{
