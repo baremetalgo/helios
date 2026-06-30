@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from timeutil import utcnow
 
@@ -57,15 +58,32 @@ def poll_prices(app):
 
 def poll_weather(app):
     with app.app_context():
+        results = {}
+        # Run all 22 facility lookups concurrently — previously these ran one at a time,
+        # so a handful of slow/timing-out requests (8s timeout each) could serialize into
+        # well over a minute of dead time before the cycle finished. A bounded thread pool
+        # keeps total wall-clock time close to the slowest single request, not the sum.
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            future_to_facility = {
+                pool.submit(fetch_open_meteo, lat, lon): (name, lat, lon)
+                for name, lat, lon in FACILITIES
+            }
+            for future in as_completed(future_to_facility):
+                name, lat, lon = future_to_facility[future]
+                try:
+                    results[name] = (lat, lon, future.result())
+                except Exception as e:
+                    log.warning("poll_weather: unexpected error for %s: %s", name, e)
+                    results[name] = (lat, lon, None)
+
         inserted = 0
-        for name, lat, lon in FACILITIES:
-            wx = fetch_open_meteo(lat, lon)
+        for name, (lat, lon, wx) in results.items():
             if not wx:
                 continue
             db.session.add(FacilityWeather(facility_name=name, lat=lat, lon=lon, **wx))
             inserted += 1
         db.session.commit()
-        log.info("poll_weather: inserted %d readings at %s", inserted, utcnow().isoformat())
+        log.info("poll_weather: inserted %d/%d readings at %s", inserted, len(FACILITIES), utcnow().isoformat())
 
 
 def poll_macro(app):
