@@ -485,7 +485,7 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
       <div class="mark"><span>⬡</span></div>
       <div>
         <div class="title">HELIOS <b>// </b>COMMODITIES INT.</div>
-        <div class="sub">GLOBAL MARKET SURVEILLANCE GRID <span style="color:var(--text-faint);opacity:.7">· BUILD 2026-06-30.11</span></div>
+        <div class="sub">GLOBAL MARKET SURVEILLANCE GRID <span style="color:var(--text-faint);opacity:.7">· BUILD 2026-06-30.12</span></div>
       </div>
     </div>
     <div class="sysrow" id="sysrow"></div>
@@ -2021,18 +2021,23 @@ let proceduralCloudTexture = null;
    sentiment (so risk/opportunity actually spreads across oceans and continents alike,
    the way a real risk-surface or weather map would), plus a uniform wash from the
    global macro/war signal so geopolitically tense periods visibly tint the whole planet,
-   not just the spot a headline happened to be pinned to. Computed on a coarse grid for
-   speed, then upscaled with the canvas's own smoothing into a soft continuous gradient. */
+   not just the spot a headline happened to be pinned to.
+
+   IMPORTANT implementation note: this used to be drawn as thousands of overlapping
+   semi-transparent radial-gradient circles. That's wrong — overlapping alpha-blended
+   shapes COMPOUND (each overlap multiplies the visible opacity), so raising the base
+   alpha even a little made the whole planet wash out solid red/green. Fixed by writing
+   each grid cell's color directly into pixel data once (no blending, no stacking), on
+   a small offscreen canvas, then letting the browser's own bilinear upscale do the
+   smoothing. Every pixel's opacity is now exactly what the code says it is — no
+   compounding possible. */
 function buildHeatmapTexture(commodityId, idx){
   const W=2048, H=1024;
-  const cv = document.createElement('canvas'); cv.width=W; cv.height=H;
-  const ctx = cv.getContext('2d');
 
   const c = COMMODITIES.find(c=>c.id===commodityId);
   const w = WORLD[commodityId];
   const window = 72;
 
-  // one "source" per facility: net recent sentiment, weighted later by inverse distance
   const sources = c.facilities.map(f=>{
     const evs = w.events.filter(e=>e.facility && e.facility.name===f.name && e.hour<=idx && e.hour>=idx-window);
     const net = clamp(evs.reduce((a,e)=>a+e.sentiment*e.magnitude,0), -2.2, 2.2);
@@ -2040,9 +2045,11 @@ function buildHeatmapTexture(commodityId, idx){
   });
   const macroBase = clamp((WAR_SIGNAL[idx]||0) * (WAR_BETA[c.category]||0.3) * 0.5, -1, 1);
 
-  // low-res field grid: cheap to compute (a few thousand cells), upscaled smoothly after
-  const gridW = 128, gridH = 64;
-  const field = new Float32Array(gridW*gridH);
+  // low-res field grid, computed once, then written as actual pixels (not stacked shapes)
+  const gridW = 160, gridH = 80;
+  const small = document.createElement('canvas'); small.width=gridW; small.height=gridH;
+  const sctx = small.getContext('2d');
+  const img = sctx.createImageData(gridW, gridH);
   for(let gy=0; gy<gridH; gy++){
     const lat = 90 - (gy/(gridH-1))*180;
     for(let gx=0; gx<gridW; gx++){
@@ -2050,36 +2057,32 @@ function buildHeatmapTexture(commodityId, idx){
       let wsum=0, vsum=0;
       sources.forEach(s=>{
         let dlon = lon-s.lon; if(dlon>180) dlon-=360; if(dlon<-180) dlon+=360;
-        const d = Math.sqrt((lat-s.lat)**2 + (dlon*Math.cos(lat*Math.PI/180))**2) + 4; // +4 avoids div-by-~0 at the source itself
+        const d = Math.sqrt((lat-s.lat)**2 + (dlon*Math.cos(lat*Math.PI/180))**2) + 4;
         const iw = 1/(d*d);
         wsum += iw; vsum += iw*s.net;
       });
-      field[gy*gridW+gx] = clamp((vsum/wsum)*0.62 + macroBase*0.38, -2, 2);
+      const v = clamp((vsum/wsum)*0.62 + macroBase*0.38, -2, 2);
+      const i = (gy*gridW+gx)*4;
+      if(Math.abs(v) < 0.04){
+        img.data[i+3] = 0; // fully transparent — no signal here
+      } else {
+        const isPos = v>=0;
+        img.data[i]   = isPos ? 61  : 255;
+        img.data[i+1] = isPos ? 220 : 92;
+        img.data[i+2] = isPos ? 132 : 92;
+        // single direct write, no compositing — this exact value is what renders,
+        // it cannot be amplified by overlap the way the old shape-stacking could
+        img.data[i+3] = Math.round(clamp(28 + Math.abs(v)*70, 22, 150));
+      }
     }
   }
+  sctx.putImageData(img, 0, 0);
 
-  // paint the low-res grid as overlapping soft circles directly at full resolution —
-  // gives a continuous, organic-looking field without a second canvas/blur pass
-  const cellW = W/gridW, cellH = H/gridH;
-  const r = Math.max(cellW, cellH) * 2.4;
-  for(let gy=0; gy<gridH; gy++){
-    for(let gx=0; gx<gridW; gx++){
-      const v = field[gy*gridW+gx];
-      if(Math.abs(v) < 0.04) continue;
-      const x = gx*cellW + cellW/2;
-      const y = gy*cellH + cellH/2;
-      const col = v>=0 ? '61,220,132' : '255,92,92';
-      // any present signal gets a real, clearly-visible floor opacity (was scaling
-      // continuously from near-zero, which is exactly what made this "barely visible")
-      const alpha = clamp(0.32 + Math.abs(v)*0.42, 0.32, 0.88);
-      const g = ctx.createRadialGradient(x,y,0,x,y,r);
-      g.addColorStop(0, `rgba(${col},${alpha})`);
-      g.addColorStop(0.6, `rgba(${col},${alpha*0.5})`);
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
-    }
-  }
+  const cv = document.createElement('canvas'); cv.width=W; cv.height=H;
+  const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(small, 0, 0, gridW, gridH, 0, 0, W, H);
 
   // bright marker + label-ready rim right at each actual facility, so the field still
   // clearly shows WHERE the underlying sources are, on top of the planet-wide wash
