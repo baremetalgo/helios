@@ -485,7 +485,7 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
       <div class="mark"><span>⬡</span></div>
       <div>
         <div class="title">HELIOS <b>// </b>COMMODITIES INT.</div>
-        <div class="sub">GLOBAL MARKET SURVEILLANCE GRID <span style="color:var(--text-faint);opacity:.7">· BUILD 2026-06-30.13</span></div>
+        <div class="sub">GLOBAL MARKET SURVEILLANCE GRID <span style="color:var(--text-faint);opacity:.7">· BUILD 2026-07-01.14</span></div>
       </div>
     </div>
     <div class="sysrow" id="sysrow"></div>
@@ -531,6 +531,7 @@ input[type=range]{-webkit-appearance:none;background:transparent;}
         <div class="lm-stat"><div class="n" id="lmActive" style="color:var(--cyan)">0</div><div class="l">ACTIVE EVENTS</div></div>
         <div class="lm-stat"><div class="n" id="lmBull" style="color:var(--green)">0</div><div class="l">BULLISH</div></div>
         <div class="lm-stat"><div class="n" id="lmBear" style="color:var(--red)">0</div><div class="l">BEARISH</div></div>
+        <div class="lm-stat"><div class="n" id="lmVessels" style="color:var(--amber)">0</div><div class="l">VESSELS</div></div>
         <div class="lm-stat"><div class="n" id="lmBasemap" style="font-size:9px;color:var(--text-dim)">SIM</div><div class="l">BASEMAP</div></div>
       </div>
 
@@ -1786,6 +1787,7 @@ function renderLiveMetricsCard(){
   $('lmActive').textContent = active.length;
   $('lmBull').textContent = active.filter(e=>e.sentClass==='pos').length;
   $('lmBear').textContent = active.filter(e=>e.sentClass==='neg').length;
+  const lmV = $('lmVessels'); if(lmV) lmV.textContent = tankerSprites.length;
 }
 
 /* =========================================================================
@@ -1858,6 +1860,40 @@ const CONTINENTS = [
   { name:'Asia', pts:[[77,104],[73,80],[66,68],[60,60],[55,38],[45,38],[41,45],[37,49],[30,61],[25,67],[20,72],[8,77],[6,80],[1,104],[10,106],[22,108],[31,121],[35,140],[43,145],[55,163],[60,170],[64,178],[68,180],[71,140],[77,104]] },
   { name:'Australia', pts:[[-11,131],[-12,142],[-17,146],[-25,153],[-33,151],[-38,147],[-35,137],[-32,134],[-31,115],[-22,114],[-15,124],[-11,131]] },
   { name:'Greenland', pts:[[76,-68],[70,-54],[60,-43],[66,-38],[76,-30],[81,-50],[76,-68]] },
+];
+
+/* Major global commodity shipping lanes — open-ocean waypoint routes (illustrative, not
+   navigationally precise) covering the world's real high-traffic corridors: Strait of
+   Hormuz, Suez/Red Sea, North Atlantic, Cape/West Africa, Malacca/South China Sea,
+   trans-Pacific, Panama, Black Sea grain corridor, South America, and Australia-Asia ore
+   routes. Used to populate a GLOBAL fleet of vessels independent of any one commodity's
+   facilities — every ship here exists regardless of what's selected in the asset panel. */
+const SEA_LANES = [
+  { name:'Hormuz–Indian Ocean', pts:[[26.5,51.0],[26.6,56.3],[24,58],[18,62],[12,66],[6,74],[1,80]] },
+  { name:'Red Sea–Mediterranean', pts:[[12,43.5],[16,41],[20,38],[24,36],[27.5,34.3],[31,32.5],[33,28],[35,19],[36,9],[36,-2],[36,-6]] },
+  { name:'Gibraltar–N. Atlantic–Europe', pts:[[36,-6],[37,-15],[40,-25],[45,-20],[49,-10],[50,-2],[51.9,4.5]] },
+  { name:'US Gulf–N. Atlantic–Europe', pts:[[28.9,-89],[27,-80],[28,-70],[32,-55],[38,-35],[44,-18],[49,-6],[51.9,4.5]] },
+  { name:'West Africa–Europe', pts:[[6.5,3.4],[2,-5],[-5,-10],[10,-18],[20,-19],[28,-16],[33,-12],[36,-9],[43,-9],[48,-5]] },
+  { name:'Malacca–South China Sea', pts:[[1.3,103.8],[3,105],[6,108],[10,111],[14,115],[18,117],[21,119],[25,121],[29,124],[33,128],[35,135]] },
+  { name:'Trans-Pacific', pts:[[33.7,-118.2],[30,-140],[25,-165],[20,179],[20,160],[23,143],[26,132],[30,125]] },
+  { name:'Panama Canal Crossing', pts:[[12,-77],[9.6,-79.5],[8.5,-79.7],[6,-80.5],[0,-82],[-8,-79],[-16,-74]] },
+  { name:'Black Sea Grain Corridor', pts:[[46.5,30.7],[44.5,31],[43,33],[41.2,29.1],[39,26],[36.5,23],[35,18],[34,11],[33,4]] },
+  { name:'Brazil–Atlantic–Europe', pts:[[-23.9,-46.3],[-18,-35],[-8,-22],[2,-12],[12,-18],[24,-19],[34,-15],[40,-10],[48,-5]] },
+  { name:'Chile/Peru–Panama–N. America', pts:[[-24.3,-70.4],[-15,-77],[-5,-81],[2,-80],[7,-79.5],[12,-80],[19,-105],[25,-112]] },
+  { name:'Australia–Asia', pts:[[-20,116],[-14,114],[-7,110],[-2,106],[1.3,103.8],[4,101],[7,99]] },
+  { name:'Qatar LNG–Asia', pts:[[25.4,51.5],[23,57],[18,65],[10,75],[4,86],[1,99],[3,107]] },
+];
+const VESSEL_NAME_A = ['Horizon','Pacific','Atlantic','Northern','Meridian','Summit','Aurora','Sovereign','Endeavour','Trident','Zenith','Polaris','Magellan','Triton'];
+const VESSEL_NAME_B = ['Star','Voyager','Pioneer','Carrier','Navigator','Spirit','Quest','Mariner','Horizon','Endeavor'];
+const CARGO_TYPES = [
+  { cargo:'Crude Oil', vesselType:'Crude Tanker' },
+  { cargo:'LNG', vesselType:'LNG Carrier' },
+  { cargo:'Refined Petroleum', vesselType:'Product Tanker' },
+  { cargo:'Iron Ore', vesselType:'Bulk Carrier' },
+  { cargo:'Copper Concentrate', vesselType:'Bulk Carrier' },
+  { cargo:'Wheat / Grain', vesselType:'Bulk Carrier' },
+  { cargo:'Coffee', vesselType:'Container Ship' },
+  { cargo:'Mixed Containers', vesselType:'Container Ship' },
 ];
 
 /* real, simplified (Natural-Earth-derived) country borders — used for thick boundary
@@ -2171,9 +2207,6 @@ function makeShipSprite(color, size){
   spr.scale.set(size,size,1);
   return spr;
 }
-const VESSEL_TYPE = { wti:'Crude Tanker', brent:'Crude Tanker', ng:'LNG Carrier', cu:'Bulk Carrier', au:'Secure Freight', ag:'Secure Freight', wheat:'Bulk Carrier', coffee:'Container Ship' };
-const VESSEL_NAME_A = ['Horizon','Pacific','Atlantic','Northern','Meridian','Summit','Aurora','Sovereign','Endeavour','Trident'];
-const VESSEL_NAME_B = ['Star','Voyager','Pioneer','Carrier','Navigator','Spirit','Quest','Mariner'];
 
 function initGlobe(){
   renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
@@ -2582,7 +2615,6 @@ function rebuildGlobeMarkers(){
   }
   facilityGroup.visible = state.layers.facilities;
   routeGroup.visible = state.layers.routes;
-  rebuildTankers();
   updateHeatmap();
 }
 
@@ -2687,40 +2719,61 @@ function updateHeatmap(){
   heatmapMesh.visible = true;
 }
 
-/* simulated tanker/vessel layer — there is no free, keyless, real-time global AIS feed, so this
-   is clearly-labeled simulated traffic riding the same trade-route curves as the flow particles */
+/* Global vessel fleet — ships travel real sea-lane waypoint paths, totally independent
+   of which commodity is currently selected. Uses catmull-rom curves through the waypoints
+   so ships follow smooth arcs along the route rather than straight line segments. Each
+   ship has a permanently visible name label, an IMO-style hull number, cargo type, and
+   speed. The whole fleet is rebuilt once (or when the layer is toggled), not per-commodity. */
 let tankerSprites = [];
+function buildSealaneCurves(){
+  return SEA_LANES.map(lane=>{
+    const pts = lane.pts.map(p=>latLonToVec3(p[0],p[1],R*1.014));
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
+    return {lane, curve, len:lane.pts.length};
+  });
+}
+let sealaneCurves = null;
 function rebuildTankers(){
   tankerGroup.clear();
   tankerSprites = [];
   clearLabelsByKind('tanker');
-  if(!state.layers.tankers) return;
-  const c = COMMODITIES.find(c=>c.id===state.selected);
-  const rng = mulberry32(hashStr(c.id+'-tankers'));
-  const vesselType = VESSEL_TYPE[c.id] || 'Cargo Vessel';
-  routeCurves.forEach(curve=>{
-    const count = 3;
-    for(let k=0;k<count;k++){
-      const ship = makeShipSprite('rgba(255,196,90,1)', 0.7);
-      ship.renderOrder = 40;
+  if(!state.layers.tankers){ tankerGroup.visible = false; return; }
+
+  if(!sealaneCurves) sealaneCurves = buildSealaneCurves();
+
+  const rng = mulberry32(404040); // fixed seed — same fleet every time, just different positions
+  const shipsPerLane = 3;
+
+  sealaneCurves.forEach(({lane, curve})=>{
+    for(let k=0; k<shipsPerLane; k++){
+      const cargo = pick(rng, CARGO_TYPES);
       const name = `${pick(rng,VESSEL_NAME_A)} ${pick(rng,VESSEL_NAME_B)}`;
+      const imo = 'IMO ' + (9000000 + Math.floor(rng()*999999));
+      const speed = 0.007 + rng()*0.006; // varies: slow LNG carrier vs fast container ship
+      const t0 = rng(); // spread ships across the route so they're not bunched at the start
+
+      const iconColor = cargo.vesselType.includes('LNG')     ? 'rgba(127,200,255,1)' :
+                        cargo.vesselType.includes('Crude')   ? 'rgba(255,165,60,1)'  :
+                        cargo.vesselType.includes('Bulk')    ? 'rgba(180,200,140,1)' :
+                                                               'rgba(220,220,220,1)';
+      const ship = makeShipSprite(iconColor, 0.68);
+      ship.renderOrder = 42;
       ship.userData = {
-        type:'tanker', curve, t: rng(), speed: 0.012 + rng()*0.01,
-        data: { name, vesselType, commodity: c.name }
+        type:'tanker', curve, t:t0, speed, forward:rng()>0.5,
+        data:{ name, imo, cargo:cargo.cargo, vesselType:cargo.vesselType, lane:lane.name }
       };
       tankerGroup.add(ship);
       tankerSprites.push(ship);
 
-      // tiny persistent wake ring so a slow-moving ship is never just a single hard-to-spot dot
-      const wake = makeRingSprite('rgba(255,196,90,0.8)', 0.46);
-      wake.material.opacity = 0.5;
-      wake.renderOrder = 39;
+      // wake ring — same color as the ship icon
+      const wake = makeRingSprite(iconColor.replace(',1)',',0.7)'), 0.42);
+      wake.material.opacity = 0.45;
+      wake.renderOrder = 41;
       tankerGroup.add(wake);
       ship.userData.wake = wake;
 
-      // persistent tracking label — follows the ship automatically since it's anchored to
-      // the sprite itself, so it's identifiable even while moving / at small icon size
-      addPlaceLabel(ship, 'tanker', '', `🚢 ${name}`, vesselType.toUpperCase());
+      // always-visible name + cargo-type label
+      addPlaceLabel(ship, 'tanker', '', `${name}`, `${cargo.vesselType} · ${cargo.cargo}`);
     }
   });
   tankerGroup.visible = true;
@@ -2827,8 +2880,9 @@ function showTooltip(ud, x, y){
   } else if(ud.type==='tanker'){
     const t = ud.data;
     tooltip.innerHTML = `<div class="tt-head">${t.name}<span class="tt-kind">${t.vesselType.toUpperCase()}</span></div>
-      <div class="tt-row"><span>CARGO</span><span>${t.commodity}</span></div>
-      <div class="tt-row" style="margin-top:4px;color:var(--text-faint);font-size:9px;">SIMULATED — no free real-time AIS feed wired in</div>`;
+      <div class="tt-row"><span>${t.imo}</span><span style="color:var(--text-faint);font-size:9px">SIMULATED AIS</span></div>
+      <div class="tt-row"><span>CARGO</span><span>${t.cargo}</span></div>
+      <div class="tt-row"><span>ROUTE</span><span>${t.lane}</span></div>`;
   } else if(ud.type==='macro'){
     const e = ud.data;
     const dirTxt = e.category==='geo' ? (e.escalation>0?'ESCALATING':'DE-ESCALATING') : (e.dxySign>0?'USD STRENGTHENING':'USD WEAKENING');
@@ -2896,9 +2950,17 @@ function animate(){
     });
     tankerSprites.forEach(spr=>{
       const ud = spr.userData;
-      ud.t = (ud.t + ud.speed*0.016) % 1;
-      spr.position.copy(ud.curve.getPoint(ud.t));
-      if(ud.wake) ud.wake.position.copy(spr.position);
+      // sealane curves are non-looping — bounce between 0 and 1 based on direction flag
+      if(ud.forward){
+        ud.t = ud.t + ud.speed*0.016;
+        if(ud.t >= 1){ ud.t = 1; ud.forward = false; }
+      } else {
+        ud.t = ud.t - ud.speed*0.016;
+        if(ud.t <= 0){ ud.t = 0; ud.forward = true; }
+      }
+      const pt = ud.curve.getPoint(clamp(ud.t, 0, 1));
+      spr.position.copy(pt);
+      if(ud.wake) ud.wake.position.copy(pt);
     });
   }
 
@@ -3036,6 +3098,7 @@ $('toggleRight').addEventListener('click', ()=>{
 buildCommoditySelect();
 initGlobe();
 rebuildGlobeMarkers();
+rebuildTankers(); // global fleet built once, persists across commodity switches
 renderAll();
 centerGlobeOnCommodity(COMMODITIES.find(c=>c.id===state.selected));
 
